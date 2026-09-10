@@ -68,5 +68,6 @@ export async function deleteInactiveRooms(): Promise<number> {
   const result = await pool.query(`DELETE FROM rooms WHERE last_activity_at < $1`, [
     cutoff,
   ]);
+  /* v8 ignore next -- pg always returns a number for rowCount on a DELETE */
   return result.rowCount ?? 0;
 }

@@ -217,6 +217,8 @@ describe("voting flow", () => {
     bob.emit("vote:cast", "8");
     await waitForState(bob, (s) => participant(s, bobId)?.voted === true);
 
+    bob.emit("vote:cast", 42);
+
     alice.emit("votes:reveal");
     const aliceRevealed = await waitForState(alice, (s) => s.revealed === true);
     expect(participant(aliceRevealed, aliceId)?.vote).toBe("5");

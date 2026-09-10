@@ -99,6 +99,7 @@ export default function Room() {
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
             const name = nameInput.trim();
+            /* v8 ignore next -- roomId is always set here: this form only renders once roomInfo has loaded, which requires roomId */
             if (!name || !roomId) return;
             localStorage.setItem(displayNameKey(roomId), name);
             setJoinParams({ displayName: name, password: passwordInput });

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 import bcrypt from "bcrypt";
@@ -53,6 +53,11 @@ describe("POST /api/rooms", () => {
 
   it("rejects a missing name", async () => {
     const res = await request(app).post("/api/rooms").send({});
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a request sent with no body at all", async () => {
+    const res = await request(app).post("/api/rooms");
     expect(res.status).toBe(400);
   });
 
@@ -164,5 +169,38 @@ describe("room state (Redis-backed)", () => {
 
     await roomsModule.leaveSocket(roomId, clientId, "socket-2");
     expect(await roomsModule.roomExists(roomId)).toBe(false);
+  });
+});
+
+describe("startCleanupJob", () => {
+  it("periodically deletes inactive rooms and leaves recent ones alone", async () => {
+    const staleId = uuid();
+    const freshId = uuid();
+    await dbModule.insertRoom({ id: staleId, name: "Stale", passwordHash: null });
+    await dbModule.insertRoom({ id: freshId, name: "Fresh", passwordHash: null });
+
+    const settingsModule = await import("../src/settings.js");
+    const staleTimestamp = Date.now() - settingsModule.settings.roomInactivityMs - 1000;
+    await dbModule.pool.query(`UPDATE rooms SET last_activity_at = $1 WHERE id = $2`, [
+      staleTimestamp,
+      staleId,
+    ]);
+
+    // Run the real interval on a tiny period instead of the production 1h one,
+    // so the test observes an actual tick without mocking timers around real DB I/O.
+    const originalIntervalMs = settingsModule.settings.cleanupIntervalMs;
+    (settingsModule.settings as { cleanupIntervalMs: number }).cleanupIntervalMs = 20;
+
+    const handle = roomsModule.startCleanupJob();
+    try {
+      await vi.waitFor(async () => {
+        expect(await dbModule.getRoom(staleId)).toBeUndefined();
+      });
+      expect(await dbModule.getRoom(freshId)).toBeDefined();
+    } finally {
+      clearInterval(handle);
+      (settingsModule.settings as { cleanupIntervalMs: number }).cleanupIntervalMs =
+        originalIntervalMs;
+    }
   });
 });

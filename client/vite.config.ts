@@ -16,5 +16,23 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      exclude: [
+        'dist/**',
+        'src/main.tsx',
+        'src/test/**',
+        'src/vite-env.d.ts',
+        '**/*.test.{ts,tsx}',
+        '**/*.config.{ts,js}',
+      ],
+      thresholds: {
+        lines: 95,
+        statements: 95,
+        functions: 95,
+        branches: 95,
+      },
+    },
   },
 })

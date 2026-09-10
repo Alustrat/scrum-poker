@@ -69,6 +69,20 @@ describe('Room', () => {
     expect(screen.getByText('Loading room…')).toBeInTheDocument();
   });
 
+  it('stays in the loading state and skips fetching/clientId generation when the route has no id', () => {
+    render(
+      <MemoryRouter initialEntries={['/room']}>
+        <Routes>
+          <Route path="/room" element={<Room />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Loading room…')).toBeInTheDocument();
+    expect(getRoomInfo).not.toHaveBeenCalled();
+    expect(crypto.randomUUID).not.toHaveBeenCalled();
+  });
+
   it('shows the error message when room info fails to load', async () => {
     vi.mocked(getRoomInfo).mockRejectedValue(new Error('No such room'));
     renderRoom();

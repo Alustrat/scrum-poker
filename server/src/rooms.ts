@@ -101,6 +101,7 @@ export async function roomExists(roomId: string): Promise<boolean> {
 export const roomsRouter = Router();
 
 roomsRouter.post("/", async (req, res) => {
+  /* v8 ignore next -- express.json() always initializes req.body to an object, even for an empty/non-JSON request */
   const { name, password } = req.body ?? {};
   if (typeof name !== "string" || !name.trim()) {
     res.status(400).json({ error: "Room name is required" });
@@ -132,6 +133,7 @@ export function startCleanupJob(): NodeJS.Timeout {
           console.log(`Cleaned up ${deleted} inactive room(s)`);
         }
       })
+      /* v8 ignore next 3 -- defensive log for an unexpected DB failure during the background sweep */
       .catch((err) => {
         console.error("Failed to clean up inactive rooms", err);
       });
