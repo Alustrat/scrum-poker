@@ -29,7 +29,20 @@ server/   Express + Socket.IO backend, PostgreSQL + Redis persistence
 
 ## Getting started
 
-Requires Node.js 20+ and Docker (for PostgreSQL and Redis).
+Requires Docker.
+
+```
+cp .env.example .env
+docker compose up -d --build
+```
+
+This starts the `postgres`, `redis`, and `app` services, and serves the app at `http://localhost:3001`. Postgres data is written to a named volume (`postgres-data`), so rooms persist across restarts. Redis has no volume — live session state is ephemeral by design (a restart just means everyone reconnects and revotes).
+
+Adjust `.env` before starting the stack if you need different ports, credentials, or a specific `CLIENT_ORIGIN`; it's gitignored and read automatically by `docker compose`.
+
+## Local development
+
+For hot-reload during development, run the app outside Docker while keeping Postgres and Redis in containers. Requires Node.js 20+.
 
 ```
 npm install
@@ -47,29 +60,3 @@ npm start
 ```
 
 `npm run build` builds the client and compiles the server; `npm start` runs the compiled server, which also serves the built client on a single port (`PORT`, default `3001`).
-
-## Docker
-
-```
-docker compose up -d --build
-```
-
-This starts the `postgres`, `redis`, and `app` services. Postgres data is written to a named volume (`postgres-data`), so rooms persist across restarts. Redis has no volume — live session state is ephemeral by design (a restart just means everyone reconnects and revotes).
-
-## Environment variables
-
-| Variable        | Default                  | Description                                  |
-| --------------- | ------------------------- | --------------------------------------------- |
-| `PORT`          | `3001`                    | Port the server listens on                   |
-| `PGHOST`        | `localhost`               | PostgreSQL host                              |
-| `PGPORT`        | `5432`                    | PostgreSQL port                              |
-| `PGUSER`        | `postgres`                | PostgreSQL user                              |
-| `PGPASSWORD`    | `postgres`                | PostgreSQL password                          |
-| `PGDATABASE`    | `scrum_poker`             | PostgreSQL database name                     |
-| `REDIS_HOST`    | `localhost`               | Redis host                                   |
-| `REDIS_PORT`    | `6379`                    | Redis port                                   |
-| `REDIS_PASSWORD`| unset                     | Redis password (if the instance requires one)|
-| `REDIS_DB`      | `0`                       | Redis logical database index                 |
-| `CLIENT_ORIGIN` | `*`                       | Allowed CORS origin for the Socket.IO server  |
-
-Production deployments should override `PGPASSWORD` (and the other `PG*`/`REDIS_*` variables) rather than relying on the local-dev defaults.
