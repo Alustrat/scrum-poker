@@ -1,12 +1,12 @@
 export const settings = {
   port: process.env.PORT ? Number(process.env.PORT) : 3001,
   db: {
-    host: process.env.PGHOST ?? "localhost",
-    port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
-    user: process.env.PGUSER ?? "postgres",
-    password: process.env.PGPASSWORD ?? "postgres",
-    name: process.env.PGDATABASE ?? "scrum_poker",
-    options: process.env.PGOPTIONS,
+    host: process.env.PG_HOST ?? "localhost",
+    port: process.env.PG_PORT ? Number(process.env.PG_PORT) : 5432,
+    user: process.env.PG_USER ?? "postgres",
+    password: process.env.PG_PASSWORD ?? "postgres",
+    name: process.env.PG_DATABASE ?? "scrum_poker",
+    options: process.env.PG_OPTIONS,
   },
   redis: {
     host: process.env.REDIS_HOST ?? "localhost",

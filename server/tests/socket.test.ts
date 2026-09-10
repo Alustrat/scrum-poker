@@ -36,7 +36,7 @@ const clients: ClientSocket[] = [];
 
 beforeAll(async () => {
   testDb = await prepareTestSchema("socket");
-  process.env.PGOPTIONS = `-c search_path=${testDb.schema}`;
+  process.env.PG_OPTIONS = `-c search_path=${testDb.schema}`;
   testRedis = await prepareTestRedisDb(3);
   process.env.REDIS_DB = String(testRedis.db);
   dbModule = await import("../src/db.js");

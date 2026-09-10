@@ -15,7 +15,7 @@ let app: express.Express;
 
 beforeAll(async () => {
   testDb = await prepareTestSchema("rooms");
-  process.env.PGOPTIONS = `-c search_path=${testDb.schema}`;
+  process.env.PG_OPTIONS = `-c search_path=${testDb.schema}`;
   testRedis = await prepareTestRedisDb(2);
   process.env.REDIS_DB = String(testRedis.db);
   dbModule = await import("../src/db.js");

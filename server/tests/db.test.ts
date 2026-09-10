@@ -8,7 +8,7 @@ let settingsModule: typeof import("../src/settings.js");
 
 beforeAll(async () => {
   testDb = await prepareTestSchema("db");
-  process.env.PGOPTIONS = `-c search_path=${testDb.schema}`;
+  process.env.PG_OPTIONS = `-c search_path=${testDb.schema}`;
   dbModule = await import("../src/db.js");
   settingsModule = await import("../src/settings.js");
   await dbModule.initDb();

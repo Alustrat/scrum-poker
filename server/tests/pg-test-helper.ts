@@ -29,7 +29,7 @@ async function withAdminClient<T>(fn: (client: Client) => Promise<T>): Promise<T
 }
 
 // Creates a fresh, uniquely-named Postgres schema for a test file to run against.
-// Point db.ts at it by setting process.env.PGOPTIONS = `-c search_path=${schema}`
+// Point db.ts at it by setting process.env.PG_OPTIONS = `-c search_path=${schema}`
 // *before* dynamically importing "../src/db.js" — every connection db.ts's pool
 // opens then has this schema pinned via the connection startup options, which is
 // safe under pooling (unlike a per-query `SET search_path`).
