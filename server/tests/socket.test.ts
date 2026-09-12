@@ -40,7 +40,7 @@ beforeAll(async () => {
   testRedis = await prepareTestRedisDb(3);
   process.env.REDIS_DB = String(testRedis.db);
   dbModule = await import("../src/db.js");
-  await dbModule.initDb();
+  await dbModule.initDb(testDb.schema);
   redisModule = await import("../src/redis.js");
   await redisModule.connectRedis();
   roomsModule = await import("../src/rooms.js");

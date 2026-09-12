@@ -11,7 +11,7 @@ beforeAll(async () => {
   process.env.PG_OPTIONS = `-c search_path=${testDb.schema}`;
   dbModule = await import("../src/db.js");
   settingsModule = await import("../src/settings.js");
-  await dbModule.initDb();
+  await dbModule.initDb(testDb.schema);
 });
 
 afterAll(async () => {
