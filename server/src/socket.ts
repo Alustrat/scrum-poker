@@ -1,19 +1,20 @@
 import type { Server, Socket } from "socket.io";
-import bcrypt from "bcrypt";
-import { getRoom, touchRoom } from "./db.js";
 import { LockTimeoutError } from "./lock.js";
 import { settings } from "./settings.js";
 import {
   castVote,
+  getRoomById,
   getRoomState,
   leaveSocket,
   resetRound,
   revealVotes,
   RoomFullError,
   TooManyConnectionsError,
+  touchRoomActivity,
   tryJoinParticipant,
+  verifyPassword,
   type RoomState,
-} from "./rooms.js";
+} from "./services/roomService.js";
 
 interface JoinAuth {
   roomId: string;
@@ -75,19 +76,15 @@ export function registerSocketHandlers(io: Server) {
       return;
     }
 
-    const room = await getRoom(roomId);
+    const room = await getRoomById(roomId);
     if (!room) {
       next(new Error("Room not found"));
       return;
     }
 
-    if (room.password_hash) {
-      const password = auth.password ?? "";
-      const valid = await bcrypt.compare(password, room.password_hash);
-      if (!valid) {
-        next(new Error("Invalid password"));
-        return;
-      }
+    if (!(await verifyPassword(room, auth.password))) {
+      next(new Error("Invalid password"));
+      return;
     }
 
     try {
@@ -119,25 +116,25 @@ export function registerSocketHandlers(io: Server) {
     const { roomId, clientId } = socket.data as SocketData;
 
     socket.join(roomId);
-    touchRoom(roomId).catch((err) => console.error("Failed to update room activity", err));
+    touchRoomActivity(roomId).catch((err) => console.error("Failed to update room activity", err));
     emitRoomState(io, roomId, await getRoomState(roomId));
 
     socket.on("vote:cast", async (value: unknown) => {
       if (value !== null && (typeof value !== "string" || !settings.allowedVotes.includes(value))) return;
       await castVote(roomId, clientId, value);
-      touchRoom(roomId).catch((err) => console.error("Failed to update room activity", err));
+      touchRoomActivity(roomId).catch((err) => console.error("Failed to update room activity", err));
       emitRoomState(io, roomId, await getRoomState(roomId));
     });
 
     socket.on("votes:reveal", async () => {
       await revealVotes(roomId);
-      touchRoom(roomId).catch((err) => console.error("Failed to update room activity", err));
+      touchRoomActivity(roomId).catch((err) => console.error("Failed to update room activity", err));
       emitRoomState(io, roomId, await getRoomState(roomId));
     });
 
     socket.on("round:reset", async () => {
       await resetRound(roomId);
-      touchRoom(roomId).catch((err) => console.error("Failed to update room activity", err));
+      touchRoomActivity(roomId).catch((err) => console.error("Failed to update room activity", err));
       emitRoomState(io, roomId, await getRoomState(roomId));
     });
 

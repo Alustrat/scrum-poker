@@ -31,8 +31,8 @@ async function withAdminClient<T>(
 }
 
 // Isolates a test file to its own Redis logical database (0-15, standalone mode).
-// Point rooms.ts at it by setting process.env.REDIS_DB = String(dbIndex) *before*
-// dynamically importing "../src/rooms.js" — settings.ts reads REDIS_DB at import
+// Point the app at it by setting process.env.REDIS_DB = String(dbIndex) *before*
+// dynamically importing "../src/redis.js" — settings.ts reads REDIS_DB at import
 // time, so the module's pubClient/subClient connect already scoped to this db.
 export async function prepareTestRedisDb(dbIndex: number): Promise<TestRedisHandle> {
   await withAdminClient(dbIndex, (client) => client.flushDb());

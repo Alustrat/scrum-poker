@@ -22,8 +22,9 @@ interface RoomStatePayload {
 let testDb: TestDbHandle;
 let testRedis: TestRedisHandle;
 let dbModule: typeof import("../src/db.js");
+let roomsRepoModule: typeof import("../src/repositories/roomsRepo.js");
 let redisModule: typeof import("../src/redis.js");
-let roomsModule: typeof import("../src/rooms.js");
+let roomServiceModule: typeof import("../src/services/roomService.js");
 let socketModule: typeof import("../src/socket.js");
 let httpServer: ReturnType<typeof createServer>;
 let io: Server;
@@ -41,14 +42,15 @@ beforeAll(async () => {
   process.env.REDIS_DB = String(testRedis.db);
   dbModule = await import("../src/db.js");
   await dbModule.initDb(testDb.schema);
+  roomsRepoModule = await import("../src/repositories/roomsRepo.js");
   redisModule = await import("../src/redis.js");
   await redisModule.connectRedis();
-  roomsModule = await import("../src/rooms.js");
+  roomServiceModule = await import("../src/services/roomService.js");
   socketModule = await import("../src/socket.js");
 
   passwordRoomId = uuid();
   const passwordHash = await bcrypt.hash(roomPassword, 4);
-  await dbModule.insertRoom({ id: passwordRoomId, name: "Locked Room", passwordHash });
+  await roomsRepoModule.insertRoom({ id: passwordRoomId, name: "Locked Room", passwordHash });
 
   httpServer = createServer();
   io = new Server(httpServer, { cors: { origin: "*" } });
@@ -177,7 +179,7 @@ describe("capacity limits", () => {
     (settingsModule.settings as { maxParticipantsPerRoom: number }).maxParticipantsPerRoom = 2;
     try {
       const roomId = uuid();
-      await dbModule.insertRoom({ id: roomId, name: "Tiny Room", passwordHash: null });
+      await roomsRepoModule.insertRoom({ id: roomId, name: "Tiny Room", passwordHash: null });
 
       const first = connectClient({ roomId, displayName: "A", clientId: uuid() });
       await waitForConnect(first);
@@ -199,7 +201,7 @@ describe("capacity limits", () => {
     (settingsModule.settings as { maxSocketsPerParticipant: number }).maxSocketsPerParticipant = 1;
     try {
       const roomId = uuid();
-      await dbModule.insertRoom({ id: roomId, name: "One Tab Room", passwordHash: null });
+      await roomsRepoModule.insertRoom({ id: roomId, name: "One Tab Room", passwordHash: null });
       const clientId = uuid();
 
       const tab1 = connectClient({ roomId, displayName: "Solo", clientId });
@@ -221,7 +223,7 @@ describe("capacity limits", () => {
     (settingsModule.settings as { lock: { maxWaitMs: number } }).lock.maxWaitMs = 50;
 
     const roomId = uuid();
-    await dbModule.insertRoom({ id: roomId, name: "Contended Room", passwordHash: null });
+    await roomsRepoModule.insertRoom({ id: roomId, name: "Contended Room", passwordHash: null });
     const holderToken = await lockModule.acquireLock(`lock:room:${roomId}:join`, { ttlMs: 5000 });
     try {
       const client = connectClient({ roomId, displayName: "Anyone", clientId: uuid() });
@@ -236,7 +238,7 @@ describe("capacity limits", () => {
 
   it("rejects a display name over the max length", async () => {
     const roomId = uuid();
-    await dbModule.insertRoom({ id: roomId, name: "Name Cap Room", passwordHash: null });
+    await roomsRepoModule.insertRoom({ id: roomId, name: "Name Cap Room", passwordHash: null });
     const client = connectClient({
       roomId,
       displayName: "x".repeat(51),
@@ -250,7 +252,7 @@ describe("capacity limits", () => {
 describe("joining a room", () => {
   it("emits room:state with the joining participant", async () => {
     const roomId = uuid();
-    await dbModule.insertRoom({ id: roomId, name: "Fresh Room", passwordHash: null });
+    await roomsRepoModule.insertRoom({ id: roomId, name: "Fresh Room", passwordHash: null });
     const clientId = uuid();
     const client = connectClient({ roomId, displayName: "Alice", clientId });
 
@@ -268,7 +270,7 @@ describe("joining a room", () => {
 describe("voting flow", () => {
   it("hides other participants' votes until reveal, then reveal and reset work", async () => {
     const roomId = uuid();
-    await dbModule.insertRoom({ id: roomId, name: "Voting Room", passwordHash: null });
+    await roomsRepoModule.insertRoom({ id: roomId, name: "Voting Room", passwordHash: null });
 
     const aliceId = uuid();
     const bobId = uuid();
@@ -299,7 +301,7 @@ describe("voting flow", () => {
     // Neither the wrong-type nor the off-deck value is a legit "room:state" trigger,
     // so poll the store directly rather than waiting on an event that won't fire.
     await new Promise((resolve) => setTimeout(resolve, 100));
-    const bobVoteAfterInvalidAttempts = (await roomsModule.getRoomState(roomId)).participants.get(
+    const bobVoteAfterInvalidAttempts = (await roomServiceModule.getRoomState(roomId)).participants.get(
       bobId
     )?.vote;
     expect(bobVoteAfterInvalidAttempts).toBe("8");
@@ -322,7 +324,7 @@ describe("voting flow", () => {
 describe("multi-tab reconnect and disconnect cleanup", () => {
   it("keeps one participant across two sockets sharing a clientId, and cleans up on full disconnect", async () => {
     const roomId = uuid();
-    await dbModule.insertRoom({ id: roomId, name: "Multi Tab Room", passwordHash: null });
+    await roomsRepoModule.insertRoom({ id: roomId, name: "Multi Tab Room", passwordHash: null });
     const clientId = uuid();
 
     const tab1 = connectClient({ roomId, displayName: "Carol", clientId });
@@ -336,9 +338,9 @@ describe("multi-tab reconnect and disconnect cleanup", () => {
 
     tab1.disconnect();
     await waitForState(tab2, (s) => s.participants.length === 1);
-    expect(await roomsModule.roomExists(roomId)).toBe(true);
+    expect(await roomServiceModule.roomExists(roomId)).toBe(true);
 
     tab2.disconnect();
-    await waitUntil(async () => !(await roomsModule.roomExists(roomId)));
+    await waitUntil(async () => !(await roomServiceModule.roomExists(roomId)));
   });
 });
