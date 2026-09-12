@@ -1,6 +1,5 @@
 import { Client } from "pg";
 import { randomBytes } from "node:crypto";
-import { settings } from "../src/settings.js";
 
 export interface TestDbHandle {
   schema: string;
@@ -12,13 +11,18 @@ function uniqueSchemaName(label: string): string {
   return `test_${label}_${suffix}`.toLowerCase();
 }
 
+// Reads env vars directly instead of importing settings.js: that module is a
+// singleton evaluated once per process, and this helper runs *before* the
+// caller sets process.env.PG_OPTIONS for db.ts's later dynamic import (see
+// prepareTestSchema below) — importing settings.js here would freeze it with
+// options: undefined, silently defeating the schema isolation entirely.
 async function withAdminClient<T>(fn: (client: Client) => Promise<T>): Promise<T> {
   const client = new Client({
-    host: settings.db.host,
-    port: settings.db.port,
-    user: settings.db.user,
-    password: settings.db.password,
-    database: settings.db.name,
+    host: process.env.PG_HOST ?? "localhost",
+    port: process.env.PG_PORT ? Number(process.env.PG_PORT) : 5432,
+    user: process.env.PG_USER ?? "postgres",
+    password: process.env.PG_PASSWORD ?? "postgres",
+    database: process.env.PG_DATABASE ?? "scrum_poker",
   });
   await client.connect();
   try {
