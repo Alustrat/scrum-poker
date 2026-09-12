@@ -51,7 +51,7 @@ Adjust `.env` before starting the stack if you need different ports, credentials
 
 ## Local development
 
-For hot-reload during development, run the app outside Docker while keeping Postgres and Redis in containers. Requires Node.js 20+.
+For hot-reload during development, run the app outside Docker while keeping Postgres and Redis in containers. Requires Node.js 24+.
 
 ```
 npm install
