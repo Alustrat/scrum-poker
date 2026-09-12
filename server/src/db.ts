@@ -63,6 +63,11 @@ export async function touchRoom(id: string): Promise<void> {
   ]);
 }
 
+export async function countRooms(): Promise<number> {
+  const result = await pool.query<{ count: number }>(`SELECT COUNT(*) AS count FROM rooms`);
+  return Number(result.rows[0].count);
+}
+
 export async function deleteInactiveRooms(): Promise<number> {
   const cutoff = Date.now() - settings.roomInactivityMs;
   const result = await pool.query(`DELETE FROM rooms WHERE last_activity_at < $1`, [

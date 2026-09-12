@@ -12,6 +12,15 @@ Create rooms to estimate your tasks with your colleagues, in real time.
 
 Chat within a room is planned as a follow-up feature.
 
+## Limits
+
+To keep the service from being overwhelmed by a single bad actor, the server enforces:
+
+- **20 participants per room**, **5 connections per participant** (multi-tab), and **1,000 rooms in parallel** — all checked atomically under a Redis lock so concurrent joins/creations can't race past the cap
+- **20 room creations per hour per IP address**
+- Room names, display names, and passwords are length-capped, and votes must be one of the deck's actual values
+- Rate limits and hard caps are configurable via `MAX_ROOMS`, `MAX_PARTICIPANTS_PER_ROOM`, `MAX_SOCKETS_PER_PARTICIPANT`, and `MAX_ROOM_CREATIONS_PER_HOUR` (see `.env.example`)
+
 ## Tech stack
 
 - **Client**: React + TypeScript, built with Vite

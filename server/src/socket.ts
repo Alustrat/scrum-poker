@@ -1,13 +1,17 @@
 import type { Server, Socket } from "socket.io";
 import bcrypt from "bcrypt";
 import { getRoom, touchRoom } from "./db.js";
+import { LockTimeoutError } from "./lock.js";
+import { settings } from "./settings.js";
 import {
   castVote,
   getRoomState,
-  joinParticipant,
   leaveSocket,
   resetRound,
   revealVotes,
+  RoomFullError,
+  TooManyConnectionsError,
+  tryJoinParticipant,
   type RoomState,
 } from "./rooms.js";
 
@@ -52,6 +56,8 @@ function emitRoomState(io: Server, roomId: string, state: RoomState) {
   }
 }
 
+const MAX_DISPLAY_NAME_LENGTH = 50;
+
 export function registerSocketHandlers(io: Server) {
   io.use(async (socket: Socket, next) => {
     const auth = socket.handshake.auth as Partial<JoinAuth>;
@@ -61,6 +67,11 @@ export function registerSocketHandlers(io: Server) {
 
     if (!roomId || !displayName || !clientId) {
       next(new Error("roomId, displayName and clientId are required"));
+      return;
+    }
+
+    if (displayName.length > MAX_DISPLAY_NAME_LENGTH) {
+      next(new Error(`Display name must be at most ${MAX_DISPLAY_NAME_LENGTH} characters`));
       return;
     }
 
@@ -79,6 +90,25 @@ export function registerSocketHandlers(io: Server) {
       }
     }
 
+    try {
+      await tryJoinParticipant(roomId, clientId, socket.id, displayName);
+    } catch (err) {
+      if (err instanceof RoomFullError) {
+        next(new Error("Room is full"));
+        return;
+      }
+      if (err instanceof TooManyConnectionsError) {
+        next(new Error("Too many connections for this participant"));
+        return;
+      }
+      if (err instanceof LockTimeoutError) {
+        next(new Error("Server is busy, try again"));
+        return;
+      }
+      next(err instanceof Error ? err : new Error("Failed to join room"));
+      return;
+    }
+
     (socket.data as SocketData).roomId = roomId;
     (socket.data as SocketData).displayName = displayName;
     (socket.data as SocketData).clientId = clientId;
@@ -86,15 +116,14 @@ export function registerSocketHandlers(io: Server) {
   });
 
   io.on("connection", async (socket: Socket) => {
-    const { roomId, displayName, clientId } = socket.data as SocketData;
+    const { roomId, clientId } = socket.data as SocketData;
 
     socket.join(roomId);
-    await joinParticipant(roomId, clientId, socket.id, displayName);
     touchRoom(roomId).catch((err) => console.error("Failed to update room activity", err));
     emitRoomState(io, roomId, await getRoomState(roomId));
 
     socket.on("vote:cast", async (value: unknown) => {
-      if (typeof value !== "string" && value !== null) return;
+      if (value !== null && (typeof value !== "string" || !settings.allowedVotes.includes(value))) return;
       await castVote(roomId, clientId, value);
       touchRoom(roomId).catch((err) => console.error("Failed to update room activity", err));
       emitRoomState(io, roomId, await getRoomState(roomId));

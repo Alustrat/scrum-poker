@@ -1,9 +1,10 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import { v4 as uuid } from "uuid";
-import { deleteInactiveRooms, getRoom, insertRoom } from "./db.js";
+import { countRooms, deleteInactiveRooms, getRoom, insertRoom } from "./db.js";
 import { pubClient } from "./redis.js";
 import { settings } from "./settings.js";
+import { LockTimeoutError, withLock } from "./lock.js";
 
 export interface Participant {
   clientId: string;
@@ -21,6 +22,29 @@ const namesKey = (roomId: string) => `room:${roomId}:names`;
 const votesKey = (roomId: string) => `room:${roomId}:votes`;
 const revealedKey = (roomId: string) => `room:${roomId}:revealed`;
 const socketsKey = (roomId: string, clientId: string) => `room:${roomId}:sockets:${clientId}`;
+const joinLockKey = (roomId: string) => `lock:room:${roomId}:join`;
+const roomsCreateLockKey = "lock:rooms:create";
+
+export class RoomFullError extends Error {
+  constructor() {
+    super("Room is full");
+    this.name = "RoomFullError";
+  }
+}
+
+export class TooManyConnectionsError extends Error {
+  constructor() {
+    super("Too many connections for this participant");
+    this.name = "TooManyConnectionsError";
+  }
+}
+
+export class RoomLimitReachedError extends Error {
+  constructor() {
+    super("Maximum number of rooms reached");
+    this.name = "RoomLimitReachedError";
+  }
+}
 
 export async function joinParticipant(
   roomId: string,
@@ -30,6 +54,32 @@ export async function joinParticipant(
 ): Promise<void> {
   await pubClient.hSet(namesKey(roomId), clientId, displayName);
   await pubClient.sAdd(socketsKey(roomId, clientId), socketId);
+}
+
+// Atomically enforces the per-room participant cap and per-participant
+// connection cap before joining, so concurrent joins can't race past either
+// limit (each check-then-act runs under a Redis lock scoped to the room).
+export async function tryJoinParticipant(
+  roomId: string,
+  clientId: string,
+  socketId: string,
+  displayName: string
+): Promise<void> {
+  await withLock(joinLockKey(roomId), async () => {
+    const isNewParticipant = !(await pubClient.hExists(namesKey(roomId), clientId));
+    if (isNewParticipant) {
+      const participantCount = await pubClient.hLen(namesKey(roomId));
+      if (participantCount >= settings.maxParticipantsPerRoom) {
+        throw new RoomFullError();
+      }
+    } else {
+      const socketCount = await pubClient.sCard(socketsKey(roomId, clientId));
+      if (socketCount >= settings.maxSocketsPerParticipant) {
+        throw new TooManyConnectionsError();
+      }
+    }
+    await joinParticipant(roomId, clientId, socketId, displayName);
+  });
 }
 
 export async function castVote(roomId: string, clientId: string, vote: string | null): Promise<void> {
@@ -98,6 +148,20 @@ export async function roomExists(roomId: string): Promise<boolean> {
   return (await pubClient.hLen(namesKey(roomId))) > 0;
 }
 
+// Fixed-window counter kept in Redis: INCR is atomic on its own, so no lock
+// is needed here the way the hard room-count cap below needs one.
+async function checkRoomCreationRateLimit(ip: string): Promise<boolean> {
+  const key = `ratelimit:rooms:create:${ip}`;
+  const count = await pubClient.incr(key);
+  if (count === 1) {
+    await pubClient.pExpire(key, settings.roomCreateRateLimit.windowMs);
+  }
+  return count <= settings.roomCreateRateLimit.max;
+}
+
+const MAX_ROOM_NAME_LENGTH = 100;
+const MAX_PASSWORD_LENGTH = 200;
+
 export const roomsRouter = Router();
 
 roomsRouter.post("/", async (req, res) => {
@@ -107,13 +171,46 @@ roomsRouter.post("/", async (req, res) => {
     res.status(400).json({ error: "Room name is required" });
     return;
   }
+  const trimmedName = name.trim();
+  if (trimmedName.length > MAX_ROOM_NAME_LENGTH) {
+    res.status(400).json({ error: `Room name must be at most ${MAX_ROOM_NAME_LENGTH} characters` });
+    return;
+  }
+  if (typeof password === "string" && password.length > MAX_PASSWORD_LENGTH) {
+    res.status(400).json({ error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters` });
+    return;
+  }
+
+  const withinRateLimit = await checkRoomCreationRateLimit(req.ip ?? "unknown");
+  if (!withinRateLimit) {
+    res.status(429).json({ error: "Too many rooms created from this address, try again later" });
+    return;
+  }
+
   const passwordHash =
     typeof password === "string" && password.length > 0
       ? await bcrypt.hash(password, settings.bcryptSaltRounds)
       : null;
 
-  const room = await insertRoom({ id: uuid(), name: name.trim(), passwordHash });
-  res.status(201).json({ id: room.id, name: room.name });
+  try {
+    const room = await withLock(roomsCreateLockKey, async () => {
+      if ((await countRooms()) >= settings.maxRooms) {
+        throw new RoomLimitReachedError();
+      }
+      return insertRoom({ id: uuid(), name: trimmedName, passwordHash });
+    });
+    res.status(201).json({ id: room.id, name: room.name });
+  } catch (err) {
+    if (err instanceof RoomLimitReachedError) {
+      res.status(429).json({ error: "Maximum number of rooms reached, try again later" });
+      return;
+    }
+    if (err instanceof LockTimeoutError) {
+      res.status(503).json({ error: "Server is busy, try again" });
+      return;
+    }
+    throw err;
+  }
 });
 
 roomsRouter.get("/:id", async (req, res) => {

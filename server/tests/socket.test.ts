@@ -170,6 +170,83 @@ describe("connection auth", () => {
   });
 });
 
+describe("capacity limits", () => {
+  it("rejects a new connection once the room is at its participant cap", async () => {
+    const settingsModule = await import("../src/settings.js");
+    const originalMax = settingsModule.settings.maxParticipantsPerRoom;
+    (settingsModule.settings as { maxParticipantsPerRoom: number }).maxParticipantsPerRoom = 2;
+    try {
+      const roomId = uuid();
+      await dbModule.insertRoom({ id: roomId, name: "Tiny Room", passwordHash: null });
+
+      const first = connectClient({ roomId, displayName: "A", clientId: uuid() });
+      await waitForConnect(first);
+      const second = connectClient({ roomId, displayName: "B", clientId: uuid() });
+      await waitForConnect(second);
+
+      const third = connectClient({ roomId, displayName: "C", clientId: uuid() });
+      const err = await waitForConnectError(third);
+      expect(err.message).toBe("Room is full");
+    } finally {
+      (settingsModule.settings as { maxParticipantsPerRoom: number }).maxParticipantsPerRoom =
+        originalMax;
+    }
+  });
+
+  it("rejects an extra socket for the same participant once past the per-participant socket cap", async () => {
+    const settingsModule = await import("../src/settings.js");
+    const originalMax = settingsModule.settings.maxSocketsPerParticipant;
+    (settingsModule.settings as { maxSocketsPerParticipant: number }).maxSocketsPerParticipant = 1;
+    try {
+      const roomId = uuid();
+      await dbModule.insertRoom({ id: roomId, name: "One Tab Room", passwordHash: null });
+      const clientId = uuid();
+
+      const tab1 = connectClient({ roomId, displayName: "Solo", clientId });
+      await waitForConnect(tab1);
+
+      const tab2 = connectClient({ roomId, displayName: "Solo", clientId });
+      const err = await waitForConnectError(tab2);
+      expect(err.message).toBe("Too many connections for this participant");
+    } finally {
+      (settingsModule.settings as { maxSocketsPerParticipant: number }).maxSocketsPerParticipant =
+        originalMax;
+    }
+  });
+
+  it("rejects a connection with a 'server is busy' error when the join lock can't be acquired", async () => {
+    const settingsModule = await import("../src/settings.js");
+    const lockModule = await import("../src/lock.js");
+    const originalMaxWaitMs = settingsModule.settings.lock.maxWaitMs;
+    (settingsModule.settings as { lock: { maxWaitMs: number } }).lock.maxWaitMs = 50;
+
+    const roomId = uuid();
+    await dbModule.insertRoom({ id: roomId, name: "Contended Room", passwordHash: null });
+    const holderToken = await lockModule.acquireLock(`lock:room:${roomId}:join`, { ttlMs: 5000 });
+    try {
+      const client = connectClient({ roomId, displayName: "Anyone", clientId: uuid() });
+      const err = await waitForConnectError(client);
+      expect(err.message).toBe("Server is busy, try again");
+    } finally {
+      await lockModule.releaseLock(`lock:room:${roomId}:join`, holderToken!);
+      (settingsModule.settings as { lock: { maxWaitMs: number } }).lock.maxWaitMs =
+        originalMaxWaitMs;
+    }
+  });
+
+  it("rejects a display name over the max length", async () => {
+    const roomId = uuid();
+    await dbModule.insertRoom({ id: roomId, name: "Name Cap Room", passwordHash: null });
+    const client = connectClient({
+      roomId,
+      displayName: "x".repeat(51),
+      clientId: uuid(),
+    });
+    const err = await waitForConnectError(client);
+    expect(err.message).toMatch(/Display name must be at most/);
+  });
+});
+
 describe("joining a room", () => {
   it("emits room:state with the joining participant", async () => {
     const roomId = uuid();
@@ -218,6 +295,14 @@ describe("voting flow", () => {
     await waitForState(bob, (s) => participant(s, bobId)?.voted === true);
 
     bob.emit("vote:cast", 42);
+    bob.emit("vote:cast", "not-a-real-card");
+    // Neither the wrong-type nor the off-deck value is a legit "room:state" trigger,
+    // so poll the store directly rather than waiting on an event that won't fire.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const bobVoteAfterInvalidAttempts = (await roomsModule.getRoomState(roomId)).participants.get(
+      bobId
+    )?.vote;
+    expect(bobVoteAfterInvalidAttempts).toBe("8");
 
     alice.emit("votes:reveal");
     const aliceRevealed = await waitForState(alice, (s) => s.revealed === true);
