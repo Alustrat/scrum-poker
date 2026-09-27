@@ -14,7 +14,8 @@
     "test": "npm run test -w server && npm run test -w client",
     "test:coverage": "npm run test:coverage -w server && npm run test:coverage -w client",
     "lint": "npm run lint -w client",
-    "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
+    "bench": "npm run bench -w server && npm run bench -w client"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

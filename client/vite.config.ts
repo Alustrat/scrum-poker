@@ -1,9 +1,10 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import codspeedPlugin from '@codspeed/vitest-plugin'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), codspeedPlugin()],
   server: {
     proxy: {
       '/api': 'http://localhost:3001',
@@ -26,6 +27,7 @@ export default defineConfig({
         'src/vite-env.d.ts',
         '**/*.test.{ts,tsx}',
         '**/*.config.{ts,js}',
+        'bench/**',
       ],
       thresholds: {
         lines: 95,
