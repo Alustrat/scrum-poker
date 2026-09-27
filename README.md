@@ -1,5 +1,7 @@
 # scrum-poker
 
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/Alustrat/scrum-poker?utm_source=badge)
+
 Create rooms to estimate your tasks with your colleagues, in real time.
 
 ## Features
@@ -69,3 +71,14 @@ npm start
 ```
 
 `npm run build` builds the client and compiles the server; `npm start` runs the compiled server, which also serves the built client on a single port (`PORT`, default `3001`).
+
+## Benchmarks
+
+Performance benchmarks use `vitest bench` and are tracked continuously with [CodSpeed](https://codspeed.io) on every pull request and push to `main`.
+
+```
+npm run bench
+```
+
+- `server/bench/`: room service and Socket.IO handlers (joins, votes, reveal/reset, room-state broadcast), run against in-memory Redis and Postgres fakes so no services are needed
+- `client/bench/`: rendering of the Room page with a full room and live state updates

@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench": "vitest bench --run"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -20,6 +21,7 @@
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
+    "@codspeed/vitest-plugin": "^5.7.1",
     "@eslint/js": "^9.13.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",

@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench": "vitest bench --run --config vitest.bench.config.ts"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
@@ -24,6 +25,7 @@
     "uuid": "^11.0.3"
   },
   "devDependencies": {
+    "@codspeed/vitest-plugin": "^5.7.1",
     "@types/bcrypt": "^5.0.2",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
